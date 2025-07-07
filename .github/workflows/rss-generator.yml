@@ -1,0 +1,73 @@
+name: Generate RSS Feed
+
+on:
+  schedule:
+    - cron: '10 1 * * *'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Python deps
+        run: python -m pip install --upgrade requests beautifulsoup4 lxml
+
+      - name: Build RSS from Shigahochi
+        run: |
+          python <<'PY'
+          import requests, datetime, email.utils, pathlib, html
+          from bs4 import BeautifulSoup
+
+          BASE_URL = "http://www.shigahochi.co.jp/"
+          TOP_URL = BASE_URL
+          now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9)))
+          last_build = email.utils.format_datetime(now)
+
+          r = requests.get(TOP_URL, timeout=20)
+          r.encoding = 'shift_jis'  # サイトがShift_JIS
+          soup = BeautifulSoup(r.text, "lxml")
+
+          items = []
+          for a in soup.select("p.sp-caption-txt1 a"):
+              title = a.get_text(strip=True)
+              link = a["href"]
+              if not link.startswith("http"):
+                  link = BASE_URL + link.lstrip("./")
+              pub = email.utils.format_datetime(now)
+              items.append(
+                  f"<item><title>{html.escape(title)}</title><link>{link}</link><guid>{link}</guid><pubDate>{pub}</pubDate></item>"
+              )
+
+          if not items:
+              print("WARNING: RSSアイテムが見つかりません")
+              exit(0)
+
+          rss = (
+              '<?xml version="1.0" encoding="UTF-8"?>\n'
+              '<rss version="2.0">\n<channel>\n'
+              '<title>滋賀報知新聞 新着記事</title>\n'
+              f'<link>{TOP_URL}</link>\n'
+              '<description>滋賀報知新聞トップページに掲載された新着記事のRSS</description>\n'
+              f'<lastBuildDate>{last_build}</lastBuildDate>\n'
+              + "\n".join(items) +
+              '\n</channel>\n</rss>'
+          )
+
+          pathlib.Path("rss.xml").write_text(rss, encoding="utf-8")
+          print("[DEBUG] rss.xml written")
+          PY
+
+      - name: Commit & push if changed
+        run: |
+          if [ ! -f rss.xml ]; then
+            echo "rss.xml not found, nothing to commit"
+            exit 1
+          fi
+          git config --global user.name github-actions
+          git config --global user.email github-actions@github.com
+          git add rss.xml
+          git commit -m "Update Shigahochi RSS" || echo "Nothing to commit"
+          git push
