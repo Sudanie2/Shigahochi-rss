@@ -2,7 +2,7 @@ name: Generate RSS Feed
 
 on:
   schedule:
-    - cron: '10 1 * * *'
+    - cron: '10 1 * * *'  # JST 10:10毎日実行
   workflow_dispatch:
 
 jobs:
@@ -26,10 +26,12 @@ jobs:
           now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9)))
           last_build = email.utils.format_datetime(now)
 
+          # 取得
           r = requests.get(TOP_URL, timeout=20)
-          r.encoding = 'shift_jis'  # サイトがShift_JIS
+          r.encoding = 'shift_jis'
           soup = BeautifulSoup(r.text, "lxml")
 
+          # 記事リンクを抽出
           items = []
           for a in soup.select("p.sp-caption-txt1 a"):
               title = a.get_text(strip=True)
@@ -42,15 +44,16 @@ jobs:
               )
 
           if not items:
-              print("WARNING: RSSアイテムが見つかりません")
+              print("WARNING: RSSアイテムが見つかりません。rss.xmlを生成しません。")
               exit(0)
 
+          # RSS本文
           rss = (
               '<?xml version="1.0" encoding="UTF-8"?>\n'
               '<rss version="2.0">\n<channel>\n'
               '<title>滋賀報知新聞 新着記事</title>\n'
               f'<link>{TOP_URL}</link>\n'
-              '<description>滋賀報知新聞トップページに掲載された新着記事のRSS</description>\n'
+              '<description>滋賀報知新聞トップページの新着記事をRSS配信</description>\n'
               f'<lastBuildDate>{last_build}</lastBuildDate>\n'
               + "\n".join(items) +
               '\n</channel>\n</rss>'
@@ -63,8 +66,8 @@ jobs:
       - name: Commit & push if changed
         run: |
           if [ ! -f rss.xml ]; then
-            echo "rss.xml not found, nothing to commit"
-            exit 1
+            echo "rss.xml not found. Nothing to commit. Exiting normally."
+            exit 0
           fi
           git config --global user.name github-actions
           git config --global user.email github-actions@github.com
