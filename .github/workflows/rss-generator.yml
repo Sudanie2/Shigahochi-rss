@@ -27,9 +27,16 @@ jobs:
           last_build = email.utils.format_datetime(now)
 
           # 取得
-          r = requests.get(TOP_URL, timeout=20)
-          r.encoding = 'shift_jis'
-          soup = BeautifulSoup(r.text, "lxml")
+          try:
+              r = requests.get(TOP_URL, timeout=20)
+              r.encoding = 'shift_jis'
+              soup = BeautifulSoup(r.text, "lxml")
+          except requests.RequestException as e:
+              print(f"ERROR: failed to fetch {TOP_URL}: {e}")
+              exit(0)
+          except Exception as e:
+              print(f"ERROR: failed to parse HTML: {e}")
+              exit(0)
 
           # 記事リンクを抽出
           items = []
@@ -44,7 +51,7 @@ jobs:
               )
 
           if not items:
-              print("WARNING: RSSアイテムが見つかりません。rss.xmlを生成しません。")
+              print("No items scraped. rss.xml will not be updated.")
               exit(0)
 
           # RSS本文
